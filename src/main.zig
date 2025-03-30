@@ -1,9 +1,14 @@
 const std = @import("std");
 const root = @import("./root.zig");
+const constants = @import("./constants.zig");
+const tokenizer = @import("./tokenizer.zig");
+
+const Tokenizer = tokenizer.Tokenizer;
 
 const Status = enum(u8) {
     arg = 1,
-    nonexistentfile = 2,
+    file = 2,
+    filetoobig = 253,
     memory = 254,
 };
 pub fn die(status: Status, msg: []const u8) void {
@@ -34,19 +39,25 @@ pub fn main() !void {
     std.debug.print("first_arg: {s}\n", .{first_arg});
 
     // Get a reader for the file passed in.
-    var fh = std.fs.cwd().openFile("foo.txt", .{}) catch {
-        return die(.nonexistentfile, "Couldn't open file");
+    // var path_buffer: [2048]u8 = undefined;
+    var fh = std.fs.cwd().openFile(first_arg, .{}) catch |err| {
+        // TODO Add a comptime test for the longest error name being n characters, then limit
+        //      the size of this buffer.
+        var err_msg_buf: [512]u8 = undefined;
+        if (std.fmt.bufPrint(&err_msg_buf, "Couldn't open file: {s}", .{@errorName(err)})) |_| {
+            return die(.file, &err_msg_buf);
+        } else |print_err| {
+            switch (print_err) {
+                error.NoSpaceLeft => return die(.memory, "Couldn't format message during error handling"),
+            }
+        }
     };
     defer fh.close();
 
-    var buf_reader = std.io.bufferedReader(fh.reader());
-    var in_stream = buf_reader.reader();
+    const file_reader_allocator = arena.allocator();
 
-    const file_reader_alloc = arena.allocator();
-    const buf: [1024]u8 = undefined;
-    while (try in_stream.readUntilDelimiterOrEofAlloc(file_reader_alloc, ' ', comptime buf.len)) |_| {
-        std.debug.print("{s}\n", .{buf});
-    }
+    const source = fh.readToEndAlloc(file_reader_allocator, std.math.maxInt(u32));
+    errdefer file_reader_allocator.free(source);
 
     // // stdout is for the actual output of your application, for example if you
     // // are implementing gzip, then only the compressed bytes should be sent to
@@ -56,11 +67,4 @@ pub fn main() !void {
     // const stdout = bw.writer();
     // try stdout.print("Run `zig build test` to run the tests.\n", .{});
     // try bw.flush(); // don't forget to flush!
-}
-
-test "simple test" {
-    var list = std.ArrayList(i32).init(std.testing.allocator);
-    defer list.deinit(); // try commenting this out and see if zig detects the memory leak!
-    try list.append(42);
-    try std.testing.expectEqual(@as(i32, 42), list.pop());
 }
