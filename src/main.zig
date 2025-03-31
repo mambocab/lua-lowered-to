@@ -39,7 +39,6 @@ pub fn main() !void {
     std.debug.print("first_arg: {s}\n", .{first_arg});
 
     // Get a reader for the file passed in.
-    // var path_buffer: [2048]u8 = undefined;
     var fh = std.fs.cwd().openFile(first_arg, .{}) catch |err| {
         // TODO Add a comptime test for the longest error name being n characters, then limit
         //      the size of this buffer.
